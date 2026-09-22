@@ -1,0 +1,90 @@
+/* Generated palettes. Values are the canonical ones published by each
+   theme's own project; the extra surface tones are derived from them. */
+[data-theme="midnight"]{
+  --bg:#14161a; --panel:#1d2026; --panel2:#2b2e34; --line:#2c313a;
+  --fg:#e7e9ee; --dim:#98a0b0; --faint:#626875;
+  --accent:#5aa9ff; --accent2:#ffb454; --ok:#57c98a; --bad:#ff6b6b;
+  --input-bg:#0d0e11; --code-bg:#0b0c0e; --tip-bg:#090a0c;
+  --choice-bg:#191c21; --choice-on:#1d2938; --hover:#373a40; --chip:#31343a;
+  --on-accent:#0c1218;
+}
+[data-theme="tokyonight"]{
+  --bg:#24283b; --panel:#292e42; --panel2:#34394f; --line:#3b4261;
+  --fg:#c0caf5; --dim:#565f89; --faint:#485075;
+  --accent:#7aa2f7; --accent2:#ff9e64; --ok:#9ece6a; --bad:#f7768e;
+  --input-bg:#171a26; --code-bg:#141620; --tip-bg:#10121b;
+  --choice-bg:#272b3f; --choice-on:#2f3853; --hover:#3d4259; --chip:#383e54;
+  --on-accent:#0c1218;
+}
+[data-theme="dracula"]{
+  --bg:#282a36; --panel:#343746; --panel2:#424552; --line:#44475a;
+  --fg:#f8f8f2; --dim:#6272a4; --faint:#535c7f;
+  --accent:#bd93f9; --accent2:#ffb86c; --ok:#50fa7b; --bad:#ff5555;
+  --input-bg:#1a1b23; --code-bg:#16171e; --tip-bg:#121318;
+  --choice-bg:#2f313f; --choice-on:#3b384f; --hover:#4d505c; --chip:#484a57;
+  --on-accent:#0c1218;
+}
+[data-theme="nord"]{
+  --bg:#2e3440; --panel:#3b4252; --panel2:#464d5d; --line:#434c5e;
+  --fg:#d8dee9; --dim:#7b88a1; --faint:#5f6a80;
+  --accent:#88c0d0; --accent2:#ebcb8b; --ok:#a3be8c; --bad:#bf616a;
+  --input-bg:#1e222a; --code-bg:#191d23; --tip-bg:#15171d;
+  --choice-bg:#353c4a; --choice-on:#3a4653; --hover:#4f5666; --chip:#4b5261;
+  --on-accent:#0c1218;
+}
+[data-theme="mocha"]{
+  --bg:#1e1e2e; --panel:#313244; --panel2:#3c3d50; --line:#45475a;
+  --fg:#cdd6f4; --dim:#7f849c; --faint:#62667b;
+  --accent:#89b4fa; --accent2:#fab387; --ok:#a6e3a1; --bad:#f38ba8;
+  --input-bg:#14141e; --code-bg:#101019; --tip-bg:#0e0e15;
+  --choice-bg:#28293a; --choice-on:#2c3249; --hover:#45475b; --chip:#414256;
+  --on-accent:#0c1218;
+}
+[data-theme="gruvbox"]{
+  --bg:#282828; --panel:#3c3836; --panel2:#48433f; --line:#504945;
+  --fg:#ebdbb2; --dim:#928374; --faint:#71665c;
+  --accent:#83a598; --accent2:#fe8019; --ok:#b8bb26; --bad:#fb4934;
+  --input-bg:#1a1a1a; --code-bg:#161616; --tip-bg:#121212;
+  --choice-bg:#333130; --choice-on:#343837; --hover:#534d46; --chip:#4e4842;
+  --on-accent:#ffffff;
+}
+[data-theme="onedark"]{
+  --bg:#282c34; --panel:#2c323c; --panel2:#353b45; --line:#3e4452;
+  --fg:#abb2bf; --dim:#5c6370; --faint:#4d5461;
+  --accent:#61afef; --accent2:#d19a66; --ok:#98c379; --bad:#e06c75;
+  --input-bg:#1a1d22; --code-bg:#16181d; --tip-bg:#121417;
+  --choice-bg:#2a2f38; --choice-on:#2f3d4c; --hover:#3d434d; --chip:#393f49;
+  --on-accent:#0c1218;
+}
+[data-theme="rosepine"]{
+  --bg:#191724; --panel:#1f1d2e; --panel2:#2d2b3c; --line:#403d52;
+  --fg:#e0def4; --dim:#908caa; --faint:#68647e;
+  --accent:#c4a7e7; --accent2:#f6c177; --ok:#9ccfd8; --bad:#eb6f92;
+  --input-bg:#100f17; --code-bg:#0e0d14; --tip-bg:#0b0a10;
+  --choice-bg:#1c1a2a; --choice-on:#2f2a3d; --hover:#383648; --chip:#323042;
+  --on-accent:#0c1218;
+}
+[data-theme="everforest"]{
+  --bg:#2d353b; --panel:#343f44; --panel2:#3f484b; --line:#4f585e;
+  --fg:#d3c6aa; --dim:#859289; --faint:#6a7574;
+  --accent:#7fbbb3; --accent2:#e69875; --ok:#a7c080; --bad:#e67e80;
+  --input-bg:#1d2226; --code-bg:#191d20; --tip-bg:#14181b;
+  --choice-bg:#313a40; --choice-on:#38464b; --hover:#495151; --chip:#444c4e;
+  --on-accent:#0c1218;
+}
+[data-theme="latte"]{
+  --bg:#eff1f5; --panel:#e6e9ef; --panel2:#dee1e8; --line:#bcc0cc;
+  --fg:#4c4f69; --dim:#8c8fa1; --faint:#a4a8b6;
+  --accent:#1e66f5; --accent2:#fe640b; --ok:#40a02b; --bad:#d20f39;
+  --input-bg:#ffffff; --code-bg:#fafbfc; --tip-bg:#dde0e7;
+  --choice-bg:#f6f7fa; --choice-on:#dae3f5; --hover:#d8dbe3; --chip:#d7dae2;
+  --on-accent:#ffffff;
+}
+[data-theme="solarized"]{
+  --bg:#fdf6e3; --panel:#eee8d5; --panel2:#e7e3d1; --line:#c9c4b0;
+  --fg:#657b83; --dim:#93a1a1; --faint:#aeb2a8;
+  --accent:#268bd2; --accent2:#cb4b16; --ok:#859900; --bad:#dc322f;
+  --input-bg:#ffffff; --code-bg:#fefcf7; --tip-bg:#e6e1d0;
+  --choice-bg:#fefaf0; --choice-on:#e8ebe1; --hover:#e2dece; --chip:#e0ddcd;
+  --on-accent:#ffffff;
+}

@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iw3 inpaint trainer</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/themes.css">
+<script>
+/* Applied before the first paint so switching themes never flashes the old
+   palette. The saved value is mirrored into config.json by app.js. */
+try{document.documentElement.dataset.theme=localStorage.getItem("nt_theme")||"midnight";}catch(e){}
+</script>
+</head><body>
+
+<header>
+  <div class="brand">
+    <span class="logo"></span>
+    <div>
+      <h1>iw3 inpaint trainer</h1>
+      <p class="sub">Collect footage, prepare it, train a model, install it.</p>
+    </div>
+  </div>
+  <div class="head-right">
+    <button id="setupBtn" class="ghost" data-tip="Change where nunif is installed and where files are kept.">Settings</button>
+  </div>
+</header>
+
+<nav id="tabs">
+  <button class="tab on" data-page="1"><b>1</b> Collect</button>
+  <button class="tab" data-page="2"><b>2</b> Prepare</button>
+  <button class="tab" data-page="3"><b>3</b> Train</button>
+  <button class="tab" data-page="4"><b>4</b> Live view</button>
+  <button class="tab" data-page="5"><b>5</b> Install</button>
+</nav>
+
+<!-- ============================ first run ============================ -->
+<section id="setup" class="page panel hidden">
+  <h2>Where is nunif installed?</h2>
+  <p class="lead">This is asked once and remembered. Pick the folder that
+    contains <code>nunif\</code> and <code>iw3\</code> inside it &mdash; usually
+    something like <code>C:\nunif-windows\nunif</code>. The trainer runs with
+    that install's own Python, the one that has PyTorch in it.</p>
+
+  <div class="row">
+    <input id="nunifPath" type="text" spellcheck="false" placeholder="C:\nunif-windows\nunif">
+    <button id="browseNunif" class="ghost" data-tip="Pick the folder from a list instead of typing it.">Browse</button>
+    <button id="detectNunif" class="ghost" data-tip="Look in the usual places and fill the box in automatically.">Auto-detect</button>
+  </div>
+  <div id="nunifStatus" class="status"></div>
+
+  <details class="more">
+    <summary>Where files get stored</summary>
+    <p class="lead">Leave these blank and everything is kept inside this GUI
+      folder, so the whole thing stays portable. Set them once here and every
+      later page uses them without asking again.</p>
+    <div class="field">
+      <label data-tip="Downloaded videos or images land here. Page 2 reads from it automatically.">Downloaded footage</label>
+      <div class="row"><input id="downloadDir" type="text" spellcheck="false" placeholder="(inside this GUI folder)">
+        <button class="ghost browse" data-target="downloadDir">Browse</button></div>
+    </div>
+    <div class="field">
+      <label data-tip="The prepared training pairs go here. Page 3 trains from it automatically.">Prepared dataset</label>
+      <div class="row"><input id="datasetDir" type="text" spellcheck="false" placeholder="(inside this GUI folder)">
+        <button class="ghost browse" data-target="datasetDir">Browse</button></div>
+    </div>
+    <div class="field">
+      <label data-tip="Trained models and their loss graphs go here. Pages 4 and 5 read from it.">Models</label>
+      <div class="row"><input id="modelsDir" type="text" spellcheck="false" placeholder="(inside this GUI folder)">
+        <button class="ghost browse" data-target="modelsDir">Browse</button></div>
+    </div>
+  </details>
+
+  <details class="more" id="themeBox">
+    <summary>Appearance</summary>
+    <p class="lead">Colour themes borrowed from well-known code editor palettes.
+      The choice is remembered on this computer.</p>
+    <div class="themes" id="themeList"></div>
+  </details>
+
+  <div class="actions">
+    <button id="saveSetup" class="primary" data-tip="Save these settings and continue.">Save and continue</button>
+  </div>
+</section>
+
+<!-- ============================= page 1 ============================= -->
+<section id="page1" class="page">
+
+  <div class="panel slim" id="depsPanel">
+    <div class="split">
+      <div>
+        <h3>Before anything else</h3>
+        <p class="lead">Installs the extra Python packages the downloaders and
+          the trainer need, into nunif's own Python. Safe to run more than once.
+          Takes a minute or two.</p>
+      </div>
+      <button id="depsBtn" class="ghost" data-tip="Installs huggingface_hub, pyarrow, lpips, dctorch, tqdm, schedulefree and requests into nunif's Python.">Install dependencies</button>
+    </div>
+    <div class="jobstrip hidden" data-job="deps"></div>
+  </div>
+
+  <div class="panel">
+    <h2>1 &middot; Collect footage</h2>
+    <p class="lead">The model learns to fill in the gaps that appear at the
+      edges of objects when a flat picture is pushed into 3D. To do that it
+      needs a lot of ordinary scenes. Download some here, or point at footage
+      you already have.</p>
+
+    <div class="field">
+      <label data-tip="Video trains the temporal model, which is what iw3 uses for video files. Pick this unless you specifically want a stills-only model.">What are you collecting?</label>
+      <div class="choices" id="mediaType">
+        <label class="choice"><input type="radio" name="media" value="video" checked>
+          <span><b>Video clips</b><i>Recommended. Trains the model iw3 uses on video.</i></span></label>
+        <label class="choice"><input type="radio" name="media" value="image">
+          <span><b>Still images</b><i>For a stills-only model. Much more data available.</i></span></label>
+        <label class="choice"><input type="radio" name="media" value="own">
+          <span><b>I already have files</b><i>Use a folder of your own videos or images.</i></span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label data-tip="Where downloads are saved. Page 2 picks this up on its own, so you never set it twice.">Save to</label>
+      <div class="row">
+        <input id="collectDir" type="text" spellcheck="false">
+        <button class="ghost browse" data-target="collectDir" data-tip="Pick a folder from a list.">Browse</button>
+        <button id="inspectDir" class="ghost" data-tip="Count the video and image files already in that folder, and look for failed downloads.">Check folder</button>
+        <button id="cleanDir" class="ghost danger hidden" data-tip="Delete the empty and half-downloaded files. Nothing usable is touched.">Remove empty files</button>
+      </div>
+      <div id="dirStatus" class="status"></div>
+    </div>
+
+    <!-- ---- stock video / image options ---- -->
+    <div id="downloadOpts">
+      <div class="field vid-only">
+        <label data-tip="Both sites are free and royalty-free. You need a free API key for each one you tick.">Sources</label>
+        <div class="row wrap">
+          <label class="check"><input type="checkbox" id="src_pexels" checked> Pexels</label>
+          <label class="check"><input type="checkbox" id="src_pixabay" checked> Pixabay</label>
+        </div>
+      </div>
+
+      <div class="field vid-only">
+        <label data-tip="Your own free keys. They are saved on this computer only, in this folder's config.json, and are never put on the command line.">API keys</label>
+        <p class="hint">Free to create, one minute each:
+          <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer">pexels.com/api</a> &middot;
+          <a href="https://pixabay.com/api/docs/" target="_blank" rel="noreferrer">pixabay.com/api/docs</a></p>
+        <div class="row wrap">
+          <input id="pexels_key" type="password" spellcheck="false" placeholder="Pexels key" autocomplete="off">
+          <input id="pixabay_key" type="password" spellcheck="false" placeholder="Pixabay key" autocomplete="off">
+          <button id="probeBtn" class="ghost" data-tip="Asks each site for one result to prove the key works. Downloads nothing.">Test keys</button>
+        </div>
+        <div class="jobstrip hidden" data-job="probe"></div>
+      </div>
+
+      <div class="field img-only hidden">
+        <label data-tip="pd12m is public domain and mostly sharp throughout. 4klsdb is native 4K but heavily favours blurred backgrounds, which teaches the model less.">Image source</label>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="imgsrc" value="pd12m" checked>
+            <span><b>pd12m</b><i>Public domain, deep focus. Recommended.</i></span></label>
+          <label class="choice"><input type="radio" name="imgsrc" value="4klsdb">
+            <span><b>4klsdb</b><i>Native 4K, but lots of shallow depth of field.</i></span></label>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="field">
+          <label data-tip="How many files to end up with. Downloading is resumable, so you can start small and run it again later to add more.">How many</label>
+          <input id="count" type="number" min="1" step="1" value="400">
+          <p class="hint" id="countHint">About 2000&ndash;5000 videos gives the model enough variety.</p>
+        </div>
+        <div class="field">
+          <label data-tip="Stop once the folder reaches this size. 0 means no limit. Videos average roughly 20 MB each.">Size limit (GB)</label>
+          <input id="max_disk_gb" type="number" min="0" step="1" value="0">
+          <p class="hint" id="sizeHint">0 = no limit.</p>
+        </div>
+        <div class="field">
+          <label data-tip="Skip anything narrower than this. Wider footage survives cropping better. 1920 is a good floor.">Minimum width</label>
+          <input id="min_width" type="number" min="0" step="10" value="1920">
+        </div>
+        <div class="field">
+          <label data-tip="How many files to fetch at the same time. Raise it on a fast connection, lower it if downloads start failing.">Parallel downloads</label>
+          <input id="workers" type="number" min="1" max="32" step="1" value="6">
+        </div>
+      </div>
+
+      <details class="more">
+        <summary>More options</summary>
+        <div class="grid vid-only">
+          <div class="field">
+            <label data-tip="Clips shorter than this are skipped - a clip needs enough frames to sample from.">Shortest clip (seconds)</label>
+            <input id="min_duration" type="number" min="1" step="1" value="5">
+          </div>
+          <div class="field">
+            <label data-tip="Very long clips are mostly one scene and waste disk. 60 seconds is plenty.">Longest clip (seconds)</label>
+            <input id="max_duration" type="number" min="1" step="1" value="60">
+          </div>
+          <div class="field">
+            <label data-tip="Anything wider than this is downscaled by the site before download, saving disk and time.">Maximum width</label>
+            <input id="max_width" type="number" min="0" step="10" value="3840">
+          </div>
+        </div>
+        <div class="field">
+          <label data-tip="Balances the download across scene types so the model does not only ever see one kind of place. Leave blank for the sensible default.">Scene mix</label>
+          <input id="mix" type="text" spellcheck="false" placeholder="people=25,urban=30,interior=10,transport=10,nature=20,other=5">
+        </div>
+        <div class="field vid-only">
+          <label data-tip="These relax the filters that keep out material which is unsuitable or off-limits for training. Leave them off unless you know you want them.">Filters</label>
+          <label class="check"><input type="checkbox" id="allow_ai_generated"> Allow AI-generated footage
+            <em data-tip="AI-generated clips contain the artefacts of another model, which this one would then learn to reproduce.">?</em></label>
+          <label class="check"><input type="checkbox" id="ignore_no_ai_training"> Ignore &quot;no AI training&quot; flags
+            <em data-tip="Some contributors mark their work as not for AI training. Leaving this off respects that mark.">?</em></label>
+          <label class="check"><input type="checkbox" id="allow_low_quality"> Allow low-quality sources
+            <em data-tip="Lets through clips the site itself rates poorly - noisy, over-compressed or badly lit.">?</em></label>
+        </div>
+      </details>
+    </div>
+
+    <!-- ---- own folder ---- -->
+    <div id="ownOpts" class="hidden">
+      <p class="lead">Point &quot;Save to&quot; above at your folder and press
+        <b>Check folder</b>. Anything in it that is a video or an image will be
+        used by page 2. Nothing is downloaded or moved.</p>
+    </div>
+
+    <div class="actions">
+      <button id="startBtn" class="primary" data-tip="Begin downloading. You can stop at any time and pick up where you left off later.">Start download</button>
+      <button id="stopBtn" class="ghost danger hidden" data-tip="Stop the download. What is already saved is kept.">Stop</button>
+      <span id="nextHint" class="hint"></span>
+    </div>
+
+    <div class="jobstrip hidden" data-job="fetch"></div>
+  </div>
+</section>
+
+<!-- ======================= pages 2-5 placeholders ======================= -->
+<section id="page2" class="page hidden">
+  <div class="panel">
+    <h2>2 &middot; Prepare the dataset</h2>
+    <p class="lead">This turns your footage into what the model actually trains
+      on. For every clip it estimates depth, warps the frame as if you were
+      looking at it with one eye, works out which pixels have nothing behind
+      them, and saves the picture and that hole mask as a pair. It is the slow
+      step &mdash; it runs on your graphics card and can take hours on a big
+      library. You can stop and restart it; finished clips are skipped.</p>
+
+    <div class="grid">
+      <div class="field">
+        <label data-tip="Filled in from step 1. Change it only if your footage is somewhere else.">Footage folder</label>
+        <div class="row"><input id="prep_src" type="text" spellcheck="false">
+          <button class="ghost browse" data-target="prep_src">Browse</button></div>
+      </div>
+      <div class="field">
+        <label data-tip="Where the finished training pairs go. Step 3 reads this automatically.">Save dataset to</label>
+        <div class="row"><input id="prep_out" type="text" spellcheck="false">
+          <button class="ghost browse" data-target="prep_out">Browse</button></div>
+      </div>
+    </div>
+    <div id="prepSrcStatus" class="status"></div>
+
+    <div class="actions">
+      <button id="scanBtn" class="ghost" data-tip="Reads the footage and reports resolution, frame rate, length and roughly how many clips you will get. Changes nothing and takes seconds.">Check footage first</button>
+      <span class="hint">Worth doing before a long run.</span>
+    </div>
+    <div class="jobstrip hidden" data-job="scan"></div>
+  </div>
+
+  <div class="panel" id="prepVideoPanel">
+    <h3>How clips are sampled</h3>
+    <p class="lead">A clip is a short run of consecutive frames. These settings
+      decide which frames get taken out of each video.</p>
+
+    <div class="grid">
+      <div class="field">
+        <label data-tip="Frames in one clip. The model is built around 12 and the trainer requires at least that, so leave this alone unless you know why you are changing it.">Frames per clip</label>
+        <input id="prep_seq" type="number" min="12" max="48" step="1" value="12">
+        <p class="hint">12 is what the model expects.</p>
+      </div>
+      <div class="field">
+        <label data-tip="Take every Nth frame within a clip. 1 keeps every frame; 2 takes every second one, so things move twice as far between frames without the clip getting longer. Raise it if your footage is slow or was shot at a high frame rate.">Frame gap (stride)</label>
+        <input id="prep_stride" type="number" min="1" max="10" step="1" value="4">
+        <p class="hint">1 = every frame. 2 = every second frame.</p>
+      </div>
+      <div class="field">
+        <label data-tip="How many separate clips to take from each video. More is useful for long videos that change a lot; a short clip of one scene gains nothing from being sampled four times.">Clips per video</label>
+        <input id="prep_clips" type="number" min="0" max="64" step="1" value="2">
+        <p class="hint">0 = as many as the video allows.</p>
+      </div>
+      <div class="field">
+        <label data-tip="Frames thrown away between one clip and the next, so two clips from the same video are not near-identical.">Gap between clips</label>
+        <input id="prep_skip" type="number" min="0" max="600" step="1" value="120">
+      </div>
+    </div>
+
+    <div class="field">
+      <label data-tip="Where in each video to begin. Skipping the opening avoids titles and fades. Random picks a different section each time and never starts so late that the clips would run off the end.">Start sampling at</label>
+      <div class="choices" id="startMode">
+        <label class="choice"><input type="radio" name="startmode" value="0" checked>
+          <span><b>The beginning</b><i>Simple and repeatable.</i></span></label>
+        <label class="choice"><input type="radio" name="startmode" value="seconds">
+          <span><b>After a few seconds</b><i>Skips titles and fade-ins.</i></span></label>
+        <label class="choice"><input type="radio" name="startmode" value="random">
+          <span><b>A random section</b><i>Different material on a second pass.</i></span></label>
+      </div>
+      <div class="row" id="startSecondsRow" style="margin-top:9px">
+        <label class="hint" style="margin:0">Seconds to skip</label>
+        <input id="prep_start_seconds" type="number" min="0" max="600" step="1" value="3">
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="field">
+        <label data-tip="Frames are thinned to about this rate first. Consecutive frames of 60fps footage barely differ, which teaches the model that nothing ever moves.">Sample rate (fps)</label>
+        <input id="prep_fps" type="number" min="1" max="60" step="1" value="24">
+      </div>
+      <div class="field">
+        <label data-tip="Size of the square cut saved for each frame. It must be at least as big as the crop size you train at, and bigger costs disk.">Saved crop size</label>
+        <input id="prep_size" type="number" min="256" max="1024" step="64" value="640">
+      </div>
+      <div class="field">
+        <label data-tip="Share of videos held back to measure quality during training. They are held out whole, so no clip from an eval video is ever trained on.">Held out for eval</label>
+        <input id="prep_eval_ratio" type="number" min="0.01" max="0.5" step="0.01" value="0.03">
+      </div>
+      <div class="field">
+        <label data-tip="Stop after this many videos. Useful for a quick trial run before committing hours.">Only process N videos</label>
+        <input id="prep_limit" type="number" min="0" step="1" value="0">
+        <p class="hint">0 = all of them.</p>
+      </div>
+    </div>
+
+    <details class="more">
+      <summary>Picture quality and geometry</summary>
+      <div class="grid">
+        <div class="field">
+          <label data-tip="The 3D strength range sampled per clip. The whole point of this project is handling large values well, so the top of the range matters.">Divergence range</label>
+          <div class="row"><input id="prep_div_lo" type="number" step="0.5" value="2">
+            <input id="prep_div_hi" type="number" step="0.5" value="16"></div>
+        </div>
+        <div class="field">
+          <label data-tip="Where the screen plane sits, sampled per clip. 0 puts everything in front, 1 puts it behind.">Convergence range</label>
+          <div class="row"><input id="prep_conv_lo" type="number" step="0.1" value="0">
+            <input id="prep_conv_hi" type="number" step="0.1" value="1"></div>
+        </div>
+        <div class="field">
+          <label data-tip="Videos narrower than this are skipped. Wider footage survives cropping better.">Minimum video width</label>
+          <input id="prep_min_width" type="number" step="10" value="1280">
+        </div>
+        <div class="field">
+          <label data-tip="Widths the frame is resized to before warping, picked at random. Training on more than one width teaches the model that hole size and picture size are related.">Working widths</label>
+          <input id="prep_frame_width" type="text" spellcheck="false" value="1280 1920">
+        </div>
+        <div class="field">
+          <label data-tip="Throws away clips whose masked area is flat or out of focus. Blurred backgrounds can only teach the model to paint mush. Check footage reports the spread so you can pick a number.">Minimum detail</label>
+          <input id="prep_min_detail" type="number" step="0.005" value="0">
+          <p class="hint">0 = keep everything. Try 0.02 to drop blurry clips.</p>
+        </div>
+        <div class="field">
+          <label data-tip="Clips whose holes are tinier than this are not worth keeping - there is almost nothing to fill in.">Minimum hole pixels</label>
+          <input id="prep_min_mask" type="number" step="50" value="300">
+        </div>
+        <div class="field">
+          <label data-tip="How much the depth map is reshaped before warping, which varies the hole shapes. Safe is a conservative set; all is more varied but can look unnatural.">Depth variation</label>
+          <select id="prep_mapper"><option value="safe">safe</option>
+            <option value="all">all</option><option value="none">none</option></select>
+        </div>
+        <div class="field">
+          <label data-tip="PNG compression. 1 is fast and a little larger; 9 is slow and smaller. Disk is cheaper than your time here.">PNG compression</label>
+          <input id="prep_png_level" type="number" min="0" max="9" step="1" value="1">
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="prep_no_mirror"> Do not also save a mirrored copy
+        <em data-tip="Mirroring doubles the dataset for free and is normally a good idea. Turn it off to halve the disk used and the time taken.">?</em></label>
+    </details>
+
+    <details class="more">
+      <summary>Depth model and speed</summary>
+      <div class="grid">
+        <div class="field">
+          <label data-tip="The model that estimates depth from a flat picture. This is the slowest part of preparing, so a smaller model is the easiest speed-up if you have a lot of footage.">Depth model</label>
+          <select id="prep_model_type">
+            <optgroup label="Depth Anything v3 - best quality">
+              <option value="Any_V3_Mono">Any_V3_Mono</option>
+              <option value="Any_V3_Mono_01">Any_V3_Mono_01</option>
+            </optgroup>
+            <optgroup label="Depth Anything v1 - faster">
+              <option value="Any_L">Any_L (large)</option>
+              <option value="Any_B">Any_B (base)</option>
+              <option value="Any_S">Any_S (small, fastest)</option>
+            </optgroup>
+          </select>
+          <p class="hint" id="modelHint"></p>
+        </div>
+        <div class="field">
+          <label data-tip="Internal resolution the depth model runs at. Higher is sharper at the edges and slower.">Depth resolution</label>
+          <input id="prep_resolution" type="number" min="256" max="1536" step="14" value="784">
+        </div>
+        <div class="field">
+          <label data-tip="Which graphics card to use. 0 is the first one. -1 runs on the processor, which is far too slow for this.">Graphics card</label>
+          <input id="prep_gpu" type="number" step="1" value="0">
+        </div>
+        <div class="field">
+          <label data-tip="Frames sent to the depth model at once. Lower it if you run out of video memory.">Depth batch</label>
+          <input id="prep_depth_batch" type="number" min="1" max="32" step="1" value="4">
+        </div>
+        <div class="field">
+          <label data-tip="Frames masked at once. Lower it if you run out of video memory.">Mask batch</label>
+          <input id="prep_mask_batch" type="number" min="1" max="32" step="1" value="4">
+        </div>
+        <div class="field">
+          <label data-tip="Threads used to write the PNG files. Writing happens while the card works on the next clip.">Writer threads</label>
+          <input id="prep_workers" type="number" min="1" max="32" step="1" value="8">
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="prep_depth_aa" checked> Smooth depth edges
+        <em data-tip="Cleans up the stair-stepping along depth edges before warping. Leave this on - the mask follows those edges exactly.">?</em></label>
+      <label class="check"><input type="checkbox" id="prep_no_refine"> Skip depth edge refinement
+        <em data-tip="Not recommended. Refinement pulls the depth edge onto the real edge in the picture: measured, it takes the depth ramp from 4.9 pixels down to 1.3. Skipping it saves a little time and every mask in the dataset is blunter for it - and you cannot fix that later without rebuilding the dataset.">?</em></label>
+      <div id="prepRefineWarn" class="warn" hidden>Depth edge refinement is off. Masks
+        will follow a depth ramp of about 4.9 pixels instead of 1.3, and the only way to
+        undo it is to build the dataset again. Leave it on unless you are testing.</div>
+      <label class="check"><input type="checkbox" id="prep_overwrite"> Redo clips that already exist
+        <em data-tip="Normally finished clips are skipped so you can stop and resume. Tick this to rebuild everything from scratch.">?</em></label>
+    </details>
+  </div>
+
+  <div class="panel" id="prepImagePanel">
+    <h3>Image options</h3>
+    <div class="grid">
+      <div class="field">
+        <label data-tip="How many different crops are taken from each image.">Crops per image</label>
+        <input id="prep_num_samples" type="number" min="1" max="16" step="1" value="2">
+      </div>
+      <div class="field">
+        <label data-tip="Chance of rotating an image before cropping, which adds variety in edge directions.">Rotation chance</label>
+        <input id="prep_rotate_prob" type="number" min="0" max="1" step="0.05" value="0.25">
+      </div>
+      <div class="field">
+        <label data-tip="Rejects images that are too flat to produce meaningful holes at all.">Minimum parallax</label>
+        <input id="prep_min_parallax" type="number" min="0" step="0.5" value="0">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel slim">
+    <div class="actions">
+      <button id="prepBtn" class="primary" data-tip="Start preparing. Safe to stop and resume - clips that are already done are skipped.">Start preparing</button>
+      <button id="prepStop" class="ghost danger hidden" data-tip="Stop after the clip being worked on. Everything already written is kept.">Stop</button>
+      <span id="prepHint" class="hint"></span>
+    </div>
+    <div class="jobstrip hidden" data-job="prep"></div>
+  </div>
+</section>
+<section id="page3" class="page hidden">
+  <div class="panel">
+    <h2>3 &middot; Train the model</h2>
+    <p class="lead">This is the long part &mdash; days, not hours, for a full
+      run. It is safe to stop and pick up again later, and you can watch it on
+      the Live view tab while it works.</p>
+
+    <div class="grid">
+      <div class="field">
+        <label data-tip="Filled in from step 2. It must contain train and eval folders.">Dataset folder</label>
+        <div class="row"><input id="train_data" type="text" spellcheck="false">
+          <button class="ghost browse" data-target="train_data">Browse</button></div>
+      </div>
+      <div class="field">
+        <label data-tip="What the finished model file will be called, and the name of the folder this run keeps its progress in. Use something you will recognise in a month.">Name this model</label>
+        <input id="train_name" type="text" spellcheck="false" placeholder="my_model">
+      </div>
+    </div>
+    <div id="trainDataStatus" class="status"></div>
+  </div>
+
+  <div class="panel">
+    <h3>How long to train</h3>
+    <p class="lead">Training is done in runs. Each run works through its epochs,
+      then the next one starts again from the same weights with a fresh learning
+      rate schedule. Results keep improving to about the third run.</p>
+    <div class="grid">
+      <div class="field">
+        <label data-tip="One epoch is one pass over the sampled crops. 200 is the standard length of a run.">Epochs per run</label>
+        <input id="train_epochs" type="number" min="1" max="2000" step="1" value="200">
+      </div>
+      <div class="field">
+        <label data-tip="How many runs to do back to back. Each one after the first keeps the weights and restarts the learning rate. The GUI starts the next one automatically when the previous finishes.">Number of runs</label>
+        <input id="train_runs" type="number" min="1" max="10" step="1" value="3">
+      </div>
+      <div class="field">
+        <label data-tip="Within a run, the learning rate falls to almost nothing then jumps back up, every this many epochs. The jolt shakes the model out of a rut; loss dips right after each one and that is expected.">Learning rate resets every</label>
+        <input id="train_lr_reset" type="number" min="5" max="500" step="5" value="40">
+        <p class="hint">epochs</p>
+      </div>
+      <div class="field">
+        <label data-tip="Crops drawn per epoch. This, not the size of your dataset, is what sets how long an epoch takes.">Samples per epoch</label>
+        <input id="train_num_samples" type="number" min="100" step="1000" value="20000">
+      </div>
+    </div>
+    <p class="hint" id="trainPlan"></p>
+  </div>
+
+  <div class="panel">
+    <h3>Model and speed</h3>
+    <div class="grid">
+      <div class="field">
+        <label data-tip="Bigger models fill wide holes better but are slower and need more video memory. Base is the right starting point.">Model size</label>
+        <select id="train_arch">
+          <option value="inpaint.nt_inpaint_v2_s">Small (~9M)</option>
+          <option value="inpaint.nt_inpaint_v2_b" selected>Base (~16M) &mdash; recommended</option>
+          <option value="inpaint.nt_inpaint_v2_l">Large (~38M)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label data-tip="Size of the square the model trains on, and the single biggest lever on quality. At divergence 16 on a 1920-wide frame the holes reach about 154 pixels, so a 256 crop leaves only ~50 pixels of real picture on each side to fill from; 384 leaves about 115. Bigger costs memory and time. Must be a multiple of 128 or it is padded up and you pay the larger size anyway.">Crop size</label>
+        <input id="train_crop" type="number" min="128" max="1024" step="64" value="384">
+      </div>
+      <div class="field">
+        <label data-tip="Crops per step. In video mode this is forced to one clip, so it is ignored there.">Batch size</label>
+        <input id="train_batch" type="number" min="1" max="64" step="1" value="8">
+      </div>
+      <div class="field">
+        <label data-tip="Batches accumulated before the model is updated. Raising this behaves like a bigger batch without using more memory.">Accumulate steps</label>
+        <input id="train_backward" type="number" min="1" max="32" step="1" value="4">
+      </div>
+    </div>
+    <div class="actions">
+      <button id="benchBtn" class="ghost" data-tip="Runs a few real training steps at these exact settings and reports how long a step takes and how much video memory it needs. Takes under a minute and changes nothing.">Measure speed and memory</button>
+      <label class="check"><input type="checkbox" id="bench_all"> compare all model sizes
+        <em data-tip="Benchmarks small, base and large together instead of just the one you picked. Takes a little longer.">?</em></label>
+      <span class="hint" id="benchHint">Worth doing before committing to a long run.</span>
+    </div>
+    <div id="benchResult" class="hidden"></div>
+    <div class="jobstrip hidden" data-job="bench"></div>
+  </div>
+
+  <div class="panel">
+    <h3>Checking progress</h3>
+    <div class="grid">
+      <div class="field">
+        <label data-tip="How often the model is measured against the held-out clips. More often means a smoother graph and slightly slower training.">Check every</label>
+        <input id="train_eval_step" type="number" min="1" max="50" step="1" value="4">
+        <p class="hint">epochs</p>
+      </div>
+      <div class="field">
+        <label data-tip="How many held-out samples each check measures. More is a steadier, more trustworthy number. The same samples are used every time, so the graph is comparable across the whole run. 0 uses the whole eval set.">Samples per check</label>
+        <input id="train_eval_samples" type="number" min="0" max="5000" step="16" value="256">
+      </div>
+      <div class="field">
+        <label data-tip="Preview pictures saved per check, each from a different clip. They appear on the Live view tab.">Preview images</label>
+        <input id="train_previews" type="number" min="1" max="32" step="1" value="8">
+      </div>
+      <div class="field">
+        <label data-tip="Rows in each preview, spread across the clip so you see it moving rather than four near-identical frames.">Rows per preview</label>
+        <input id="train_preview_rows" type="number" min="1" max="12" step="1" value="4">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Which models to keep</h3>
+    <p class="lead">The best-scoring model is always kept, whatever you choose here.</p>
+    <div class="choices" id="keepMode">
+      <label class="choice"><input type="radio" name="keep" value="best" checked>
+        <span><b>Best only</b><i>One file, the lowest eval loss so far. Recommended.</i></span></label>
+      <label class="choice"><input type="radio" name="keep" value="every">
+        <span><b>Best, plus a snapshot every so often</b><i>Lets you go back if a later run gets worse.</i></span></label>
+      <label class="choice"><input type="radio" name="keep" value="all">
+        <span><b>Best, plus every epoch</b><i>Hundreds of files, gigabytes. Rarely worth it.</i></span></label>
+    </div>
+    <div class="row" id="keepStepRow" style="margin-top:10px">
+      <label class="hint" style="margin:0">Snapshot every</label>
+      <input id="train_keep_step" type="number" min="1" max="200" step="1" value="20">
+      <span class="hint" style="margin:0">epochs</span>
+    </div>
+
+    <details class="more">
+      <summary>Advanced</summary>
+      <div class="grid">
+        <div class="field">
+          <label data-tip="CAME learns faster than AdamW here and is the default. Schedule-Free is what nunif's own recipe uses for the later runs.">Optimizer</label>
+          <select id="train_optimizer">
+            <option value="came">CAME &mdash; recommended</option>
+            <option value="adamw">AdamW</option>
+            <option value="adamw_schedulefree">AdamW Schedule-Free</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-tip="Leave blank and a sensible rate is chosen for the optimizer you picked. CAME wants a lower one than AdamW.">Learning rate</label>
+          <input id="train_lr" type="text" spellcheck="false" placeholder="automatic">
+        </div>
+        <div class="field">
+          <label data-tip="Leave blank for the right default: the temporal loss for video, the plain one for images.">Loss</label>
+          <select id="train_loss">
+            <option value="">automatic</option>
+            <option value="temporal_l1lpips">temporal_l1lpips</option>
+            <option value="temporal_l1dctlpips">temporal_l1dctlpips</option>
+            <option value="l1lpips">l1lpips</option>
+            <option value="l1dctlpips">l1dctlpips</option>
+            <option value="dct">dct</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-tip="The perceptual part of the loss runs a large image-recognition network (VGG16) over both your model's output and the real frames. Measured on this model at a 384 crop it costs more than the model itself - 3.64 against 2.27 trillion operations a step, 62% of the total. Frames inside one clip are at most half a second apart and look almost identical, so measuring it on a handful of randomly chosen frames each step gives the same answer on average for a fraction of the work. 4 is a good balance; 0 uses every frame, which is what it did before.">Perceptual frames per clip</label>
+          <input id="train_lpips_frames" type="number" min="0" max="12" step="1" value="4">
+        </div>
+        <div class="field">
+          <label data-tip="Background threads loading data. Each epoch decodes tens of thousands of PNGs, so on an SSD more threads usually helps until the graphics card is the limit. On a mechanical drive too many will fight each other. 8 suits a typical 8-core machine with an SSD.">Loader threads</label>
+          <input id="train_workers" type="number" min="0" max="32" step="1" value="8">
+        </div>
+        <div class="field">
+          <label data-tip="Which graphics card to train on. 0 is the first one. -1 runs on the processor, which is far too slow for real training.">Graphics card</label>
+          <input id="train_gpu" type="number" step="1" value="0">
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="train_disable_hard"> Turn off hard example mining
+        <em data-tip="Normally the trainer revisits the crops it does worst on. Turning that off makes each epoch a plain random sample.">?</em></label>
+      <label class="check"><input type="checkbox" id="train_ema" checked> Keep an averaged copy of the model
+        <em data-tip="Saves a running average of the weights instead of whichever step happened to land last. Averaging cancels the jitter that the learning rate leaves behind, so the saved model is usually a little better than the raw one at no cost in training time. This is what gets evaluated and installed.">?</em></label>
+      <div class="grid">
+        <div class="field">
+          <label data-tip="How long the averaged copy remembers. 0.999 averages roughly the last thousand steps, about two epochs at these settings. Higher is smoother but slower to follow real progress.">Averaging decay</label>
+          <input id="train_ema_decay" type="number" min="0.9" max="0.99999" step="0.0005" value="0.999">
+        </div>
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label data-tip="Adds a second network whose only job is to tell your model's fills apart from real footage. L1 and LPIPS reward the average of everything a hole could plausibly contain, and an average of plausible fills looks blurry - a critic pushes for one sharp answer instead. It costs extra memory and time per step, and it is the one setting here that can make training unstable, so watch the first few evals.">Critic (adversarial loss)</label>
+          <select id="train_discriminator">
+            <option value="">none</option>
+            <option value="l3c">l3c - lightest</option>
+            <option value="l3ce">l3ce</option>
+            <option value="ffc">ffc</option>
+            <option value="ffce">ffce</option>
+            <option value="l3cffce">l3cffce - heaviest</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-tip="How loudly the critic speaks compared with the reconstruction loss. Higher is sharper and riskier. 0.2 is the tested default; raise it only once a run has stayed stable.">Critic strength</label>
+          <input id="train_disc_weight" type="number" min="0" max="2" step="0.05" value="0.2">
+        </div>
+        <div class="field">
+          <label data-tip="Steps before the critic is allowed to influence your model at all. It gives the critic time to learn what real footage looks like first, so it is not steering with noise. Counted in optimizer steps, not epochs.">Critic warm-up steps</label>
+          <input id="train_disc_warmup" type="number" min="0" max="20000" step="100" value="500">
+        </div>
+        <div class="field">
+          <label data-tip="Which run the critic joins on. 1 trains adversarially the whole way, which is what inpainting papers normally do, and the critic now carries over between runs rather than restarting from scratch. 3 is the cautious order: the first two runs build a solid model on reconstruction loss alone and their best is archived where nothing can overwrite it, so if the critic misbehaves you still have that. Start at 3 until you have seen a critic run behave on your footage, then try 1.">Critic starts at run</label>
+          <input id="train_disc_start" type="number" min="1" max="20" step="1" value="3">
+        </div>
+        <div class="field">
+          <label data-tip="Number format for the fast maths. fp16 is the default and needs a loss scaler to avoid overflow. bfloat16 covers a far wider range so it never overflows and needs no scaler - the same speed on this card, and steadier when a critic is involved - at the cost of a little precision.">Fast-maths format</label>
+          <select id="train_amp_float">
+            <option value="">fp16 (default)</option>
+            <option value="bfloat16">bfloat16</option>
+          </select>
+        </div>
+      </div>
+      <div id="trainDiscWarn" class="warn" hidden>A critic uses noticeably more memory
+        and time per step. Run the benchmark at this crop before starting a long run, and
+        check the first few evals: if the eval loss climbs and keeps climbing, lower the
+        critic strength or turn it off.</div>
+      <label class="check"><input type="checkbox" id="train_channels_last"> Channels-last memory layout
+        <em data-tip="Helps convolutional networks on tensor cores. This model is mostly MLP blocks, so it may do nothing or be slightly slower. Measure it with the benchmark before using it for a real run - do not assume it helps.">?</em></label>
+      <div class="split">
+        <label class="check" style="margin:0"><input type="checkbox" id="train_compile"> Compile the model (experimental)
+        <em data-tip="torch.compile fuses the model into faster kernels. It needs to build a small C helper, which the embeddable Python that nunif ships cannot do - it has no Include\\Python.h or libs\\python312.lib. Press 'Enable compile support' to fetch those. Compiling happens once, before epoch 1, at the crop and clip length this run uses, and CAN TAKE SEVERAL MINUTES with no output - the log says so and prints how long it took. If the toolchain is broken it says so and trains without it. Compare epoch times against an uncompiled run to see if it was worth it.">?</em></label>
+        <button id="compileSupportBtn" class="ghost" data-tip="Downloads the C headers and import library that CPython publishes for this exact version, and unpacks them beside nunif's Python. Nothing is registered or installed system-wide - delete the Include and libs folders to undo it. Only needed once, and only if you want to try compiling.">Enable compile support</button>
+      </div>
+      <div class="jobstrip hidden" data-job="compile_support"></div>
+    </details>
+  </div>
+
+  <div class="panel slim">
+    <label class="check big" data-tip="Picks up from the last finished epoch with the learning rate schedule intact. Use this if training stopped part way; leave it off to start from the beginning.">
+      <input type="checkbox" id="train_resume"> <b>Continue where it stopped</b>
+      <span id="resumeNote" class="hint" style="margin:0"></span></label>
+    <label class="check" data-tip="When the last run finishes, start another one instead of stopping, and keep doing that until you press Stop. Each extra run keeps the weights and restarts the learning rate, exactly like the planned ones. You can turn this on or off at any time, including from the Live view while training is going - it is read again at every run boundary.">
+      <input type="checkbox" id="train_overflow"> Keep training past the last run
+      <span class="hint" style="margin:0">(until you stop it)</span></label>
+    <div class="actions">
+      <button id="trainBtn" class="primary" data-tip="Start training. The runs are queued up and go one after another without you having to do anything.">Start training</button>
+      <button id="trainStop" class="ghost danger hidden" data-tip="Stop after the current epoch finishes writing. The checkpoint is kept, so you can continue later.">Stop</button>
+      <button id="toLive" class="ghost hidden" data-tip="Watch the loss graph and the preview images.">Open Live view</button>
+      <span id="trainHint" class="hint"></span>
+    </div>
+    <div class="jobstrip hidden" data-job="train"></div>
+  </div>
+</section>
+<section id="page4" class="page hidden">
+  <div class="panel">
+    <div class="split" style="align-items:center">
+      <div>
+        <h2 style="margin:0">4 &middot; Live view</h2>
+        <p class="lead" style="margin:2px 0 0">Loss so far, and what the model is
+          actually producing. Updates itself while training runs.</p>
+      </div>
+      <div class="row">
+        <label class="hint" style="margin:0" data-tip="Which training run to look at. Runs appear here as soon as they have written their first epoch.">Run</label>
+        <select id="liveRun"></select>
+      </div>
+    </div>
+
+    <div class="stats" id="liveStats"></div>
+    <div id="liveEta" class="etabar"></div>
+
+    <div id="livePace" class="pace hidden">
+      <div class="pacehead"><b id="paceWhat"></b><span id="paceNums"></span></div>
+      <div class="bar"><i id="paceBar"></i></div>
+    </div>
+
+    <div class="actions" id="liveActions">
+      <button id="liveStart" class="primary" data-tip="Start training with the settings from step 3.">Start training</button>
+      <button id="liveStop" class="ghost danger hidden" data-tip="Stop after the current epoch finishes writing. The checkpoint is kept, so you can continue later.">Stop</button>
+      <label class="check" data-tip="Picks up from the last finished epoch with the learning rate schedule intact, instead of starting from the beginning.">
+        <input type="checkbox" id="live_resume"> Continue where it stopped</label>
+      <label class="check" data-tip="Keep starting another run when the last one finishes, until you press Stop. Safe to flick on or off while training is running: the chain checks it again each time a run ends.">
+        <input type="checkbox" id="live_overflow"> Keep going past the last run</label>
+      <span id="liveMsg" class="hint" style="margin:0"></span>
+    </div>
+
+    <canvas id="chart"></canvas>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--accent)"></i>train loss</span>
+      <span><i class="swatch" style="background:var(--accent2)"></i>eval loss</span>
+      <span class="hint" style="margin:0">both on the same scale, so the gap between
+        them is real</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="controls">
+      <label data-tip="Drag to step back through training and watch the same crops improve.">epoch <b id="epochLabel">-</b></label>
+      <input type="range" id="epochRange" min="0" max="0" value="0">
+      <label data-tip="Show every sample from this check, or just one of them. Picking one and dragging the epoch slider plays that same crop forward through training.">sample <select id="slot"></select></label>
+      <label class="check"><input type="checkbox" id="follow" checked> follow latest</label>
+      <span class="hint" id="previewCount" style="margin:0"></span>
+    </div>
+    <div class="labels"><div>masked input</div><div>mask</div><div>prediction</div><div>ground truth</div></div>
+    <div id="preview"><div class="empty">No preview images yet. They appear after the
+      first check of the eval set.</div></div>
+  </div>
+</section>
+<section id="page5" class="page hidden">
+  <div class="panel">
+    <h2>5 &middot; Install into iw3</h2>
+    <p class="lead">This puts a finished model where iw3 can find it. Afterwards
+      it appears in the <b>Inpainting Model</b> box in the iw3 window, from any
+      of its launchers &mdash; you do not have to start iw3 from here.</p>
+
+    <div class="field">
+      <label data-tip="Best is the lowest eval loss so far for that run, which is almost always the one you want.">Which model</label>
+      <div class="choices" id="pickMode">
+        <label class="choice"><input type="radio" name="pickmode" value="best" checked>
+          <span><b>One I trained</b><i>Pick from the runs in your models folder.</i></span></label>
+        <label class="choice"><input type="radio" name="pickmode" value="custom">
+          <span><b>A specific file</b><i>Any .pth from anywhere on this computer.</i></span></label>
+      </div>
+    </div>
+
+    <div class="field" id="pickBestBox">
+      <label data-tip="Every finished model found in your models folder. Checkpoints are left out - those are for resuming training, not for using.">Model</label>
+      <select id="modelPick"></select>
+    </div>
+
+    <div class="field hidden" id="pickCustomBox">
+      <label data-tip="Full path to a .pth file that nunif saved.">Model file</label>
+      <div class="row"><input id="modelPath" type="text" spellcheck="false" placeholder="C:\path\to\model.pth">
+        <button id="modelCheck" class="ghost" data-tip="Read the file and work out which architecture it is.">Check file</button></div>
+    </div>
+
+    <div id="modelInfo" class="minfo hidden"></div>
+
+    <div class="field">
+      <label data-tip="The name that appears in iw3's Inpainting Model box. Letters, numbers, dot, dash and underscore only. Re-using a name replaces that entry.">Name it in iw3</label>
+      <input id="installName" type="text" spellcheck="false" placeholder="my_video_model">
+      <p class="hint" id="nameHint"></p>
+    </div>
+
+    <div class="actions">
+      <button id="installBtn" class="primary" data-tip="Adds the model to iw3's list and installs everything it needs to run properly - the same thing the standalone installer does, with the options below.">Install into iw3</button>
+      <button id="verifyBtn" class="ghost" data-tip="Asks iw3 itself, in a fresh process, whether every installed piece is live and whether the model named above loads.">Check the install</button>
+      <span id="installMsg" class="hint" style="margin:0"></span>
+    </div>
+
+    <div class="field">
+      <label data-tip="Installed alongside the model. These are the same choices the standalone installer asks about, and they apply to every inpainting model in iw3, not just this one.">Also install</label>
+      <div style="display:flex;flex-direction:column;gap:6px">
+      <label class="check" data-tip="iw3's Inpaint Max Width normally shrinks the whole video. With this, only the model runs small and the rest of the frame keeps full resolution - the speed of a 1280-wide pass with the resolution of the source. Works with any inpainting model, including iw3's own.">
+        <input type="checkbox" id="install_lowres" checked> Low-res inpainting, full-res output
+        <span class="hint" style="margin:0">(set Inpaint Max Width in iw3)</span></label>
+      <label class="check" data-tip="At high divergence iw3 fills the left and right screen edges by smearing the outermost column sideways - about 80 px at divergence 16 on 1920-wide video. iw3's Preserve Screen Border option fixes that, but forward_inpaint ignores it. This makes it work. Nothing changes until you tick the box in iw3.">
+        <input type="checkbox" id="install_border" checked> Screen-edge fix
+        <span class="hint" style="margin:0">(tick Preserve Screen Border in iw3)</span></label>
+      </div>
+    </div>
+    <div class="field">
+      <p class="hint" style="margin:0">Always included with the model: the mask handling it needs, and
+        window reuse (each video frame runs once instead of twice). Every install
+        refreshes all of it to this GUI's version.</p>
+    </div>
+
+    <div id="installResult" class="status"></div>
+    <div id="installChecks" class="minfo hidden"></div>
+    <div class="jobstrip hidden" data-job="verify"></div>
+  </div>
+
+  <div class="panel">
+    <h3>What is installed now</h3>
+    <div id="installState" class="minfo"></div>
+    <details class="more">
+      <summary>What this changes on your computer</summary>
+      <p class="lead">Three things, all reversible:</p>
+      <ul class="lead" style="padding-left:20px">
+        <li>An entry in <code>iw3\inpaint_models.yml</code>, which is iw3's own
+          list of inpainting models, pointing at a frozen copy of the weights in
+          this GUI's <code>models\installed</code> folder. Your existing entries
+          and comments are left alone, and a <code>.backup</code> copy is made
+          the first time. Each name is its own entry, so several epochs can sit
+          side by side for comparing.</li>
+        <li>A <code>nt_inpaint</code> folder inside nunif, holding the code that
+          runs in iw3 &mdash; the same files the standalone installer puts
+          there &mdash; and a <code>config.json</code> saying which pieces are on.</li>
+        <li>Two small files in this Python's packages folder
+          (<code>nt_iw3.pth</code> and <code>nt_iw3_register.py</code>) that
+          switch it on for every iw3 launcher. They cost nothing at startup and
+          do not import PyTorch until iw3 itself is loaded. This GUI's older
+          hook (<code>ntrainer.pth</code>) is removed, as it would conflict.</li>
+      </ul>
+      <p class="lead">To undo it, run <code>nt_inpaint\uninstall.bat</code> in
+        the nunif folder and remove the entries from the yml.
+        <code>NT_INPAINT_DISABLE=1</code> switches everything off without
+        removing anything.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ============================ overlays ============================ -->
+<div id="picker" class="modal hidden">
+  <div class="modal-box">
+    <div class="split">
+      <h3>Pick a folder</h3>
+      <button id="pickClose" class="ghost">Close</button>
+    </div>
+    <div class="row"><input id="pickPath" type="text" spellcheck="false"></div>
+    <div id="pickDrives" class="row wrap drives"></div>
+    <ul id="pickList" class="picklist"></ul>
+    <div class="actions">
+      <button id="pickUse" class="primary">Use this folder</button>
+      <span id="pickErr" class="status"></span>
+    </div>
+  </div>
+</div>
+
+<div id="tip" class="tip hidden"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/app.js"></script>
+</body></html>

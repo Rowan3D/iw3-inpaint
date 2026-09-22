@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+# model weights and caches never go in the repo -- attach them to a Release
+*.pth
+cache/
+*.pt
+# the trainer's personal files: settings (with your Pexels / Pixabay API keys),
+# downloaded footage, datasets and training runs
+trainer/config.json
+trainer/data/
+api_keys.bat
+# the installer ships a model only in its Release zip
+installer/models/*
+!installer/models/PUT_THE_MODEL_HERE.txt

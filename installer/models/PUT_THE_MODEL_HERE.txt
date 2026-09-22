@@ -1,0 +1,13 @@
+Drop the .pth file you want to ship in this folder, then zip the whole
+iw3_inpaint_installer folder and send it.
+
+ * One .pth here  -> the installer uses it without asking.
+ * Several        -> it asks which one.
+ * None           -> it offers the low-res patch on its own.
+
+The name of the file becomes the name in iw3's "Inpainting Model" box, so
+call it something people will recognise, for example
+
+    HQ_Inpaint_v2.3_e502.pth   ->   shows up as  HQ_Inpaint_v2.3_e502
+
+You can delete this text file.

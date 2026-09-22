@@ -1,0 +1,7 @@
+# Windows batch files must keep CRLF line endings, or cmd.exe can misread labels
+*.bat text eol=crlf
+*.py  text eol=lf
+*.md  text
+*.txt text
+*.pt  binary
+*.pth binary
