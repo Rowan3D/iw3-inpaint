@@ -559,6 +559,17 @@ def do_install(args):
         os.makedirs(models_dir, exist_ok=True)
         installed_model = path.join(models_dir, path.basename(model_path))
         shutil.copyfile(model_path, installed_model)
+        # an update ships a new file name (e594 -> e789): drop the old copies,
+        # which nothing points at any more, instead of leaving 85 MB each behind
+        for f in os.listdir(models_dir):
+            fp_old = path.join(models_dir, f)
+            if (f.lower().endswith(".pth") and path.isfile(fp_old)
+                    and path.normcase(fp_old) != path.normcase(installed_model)):
+                try:
+                    os.remove(fp_old)
+                    say(f"   old model  :  removed {f}")
+                except OSError:
+                    pass
         mb = os.path.getsize(installed_model) / 1e6
         say(f"   model      -> {installed_model}  ({mb:.0f} MB"
             + (f", {info['params'] / 1e6:.1f}M parameters" if info.get("params") else "")
